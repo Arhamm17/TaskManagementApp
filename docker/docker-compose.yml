@@ -1,0 +1,23 @@
+services:
+
+  backend:
+    build:
+      context: ../backend
+    container_name: task-backend
+    networks:
+      - task-network
+
+  frontend:
+    build:
+      context: ../frontend
+    container_name: task-frontend
+    ports:
+      - "8081:80"
+    depends_on:
+      - backend
+    networks:
+      - task-network
+
+networks:
+  task-network:
+    driver: bridge
