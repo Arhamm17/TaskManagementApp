@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: task-frontend:1.0
+          image: arhammrashid17/task-frontend:latest
 
           ports:
             - containerPort: 80

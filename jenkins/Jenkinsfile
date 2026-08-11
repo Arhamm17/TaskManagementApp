@@ -1,0 +1,121 @@
+pipeline {
+
+    agent any
+
+    environment {
+        DOCKER_IMAGE_FRONTEND = "arhammrashid17/task-frontend"
+        DOCKER_IMAGE_BACKEND = "arhammrashid17/task-backend"
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Test Backend') {
+            steps {
+                sh '''
+                    python3 -m venv /tmp/task-venv
+                    /tmp/task-venv/bin/pip install --upgrade pip
+                    /tmp/task-venv/bin/pip install -r backend/requirements.txt
+                    /tmp/task-venv/bin/pip install pytest
+                    /tmp/task-venv/bin/pytest
+                '''
+            }
+        }
+
+        stage('Build Backend Image') {
+            steps {
+                sh '''
+                    docker build \
+                        -t ${DOCKER_IMAGE_BACKEND}:${BUILD_NUMBER} \
+                        -t ${DOCKER_IMAGE_BACKEND}:latest \
+                        ./backend
+                '''
+            }
+        }
+
+        stage('Build Frontend Image') {
+            steps {
+                sh '''
+                    docker build \
+                        -t ${DOCKER_IMAGE_FRONTEND}:${BUILD_NUMBER} \
+                        -t ${DOCKER_IMAGE_FRONTEND}:latest \
+                        ./frontend
+                '''
+            }
+        }
+
+        stage('Push Images') {
+            steps {
+
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'dockerhub',
+                        usernameVariable: 'DOCKER_USERNAME',
+                        passwordVariable: 'DOCKER_PASSWORD'
+                    )
+                ]) {
+
+                    sh '''
+                        echo "$DOCKER_PASSWORD" | \
+                        docker login \
+                        -u "$DOCKER_USERNAME" \
+                        --password-stdin
+
+                        docker push ${DOCKER_IMAGE_BACKEND}:${BUILD_NUMBER}
+                        docker push ${DOCKER_IMAGE_BACKEND}:latest
+
+                        docker push ${DOCKER_IMAGE_FRONTEND}:${BUILD_NUMBER}
+                        docker push ${DOCKER_IMAGE_FRONTEND}:latest
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy Kubernetes') {
+            steps {
+
+                sh '''
+                    kubectl apply -f k8s/namespace.yaml
+
+                    kubectl apply -f k8s/backend/
+                    kubectl apply -f k8s/frontend/
+
+                    kubectl set image deployment/backend \
+                        backend=${DOCKER_IMAGE_BACKEND}:${BUILD_NUMBER} \
+                        -n task-manager
+
+                    kubectl set image deployment/frontend \
+                        frontend=${DOCKER_IMAGE_FRONTEND}:${BUILD_NUMBER} \
+                        -n task-manager
+
+                    kubectl rollout status deployment/backend \
+                        -n task-manager
+
+                    kubectl rollout status deployment/frontend \
+                        -n task-manager
+                '''
+            }
+        }
+    }
+
+    post {
+
+        success {
+            echo '======================================'
+            echo 'CI/CD PIPELINE SUCCESSFUL'
+            echo '======================================'
+        }
+
+        failure {
+            echo '======================================'
+            echo 'CI/CD PIPELINE FAILED'
+            echo 'Check the Jenkins console output.'
+            echo '======================================'
+        }
+    }
+}

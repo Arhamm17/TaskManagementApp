@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: backend
-          image: task-backend:1.0
+          image: arhammrashid17/task-backend:latest
 
           ports:
             - containerPort: 5000
